@@ -49,9 +49,10 @@ shoot by **holding LMB**. Both windows stay in sync.
 
 ```bash
 npx tsx scripts/m1-physics-test.ts     # physics + reconciliation unit test
-node scripts/m1-integration-test.mjs   # movement end-to-end vs running server
 npx tsx scripts/m2-combat-test.ts      # hitscan raycast unit test
-node scripts/m2-integration-test.mjs   # combat end-to-end vs running server
+npx tsx scripts/m3-ai-test.ts          # nav-grid + jump-links + A* + GOAP unit test
+node scripts/m1-integration-test.mjs   # movement/sync end-to-end (joins with noBots)
+node scripts/m3-integration-test.mjs   # Horde end-to-end: bots, damage, kills, wave advance
 ```
 
 ## Status
@@ -76,4 +77,13 @@ node scripts/m2-integration-test.mjs   # combat end-to-end vs running server
 - **HP, death, respawn**: HP bars over every player, kill/death counters, a 2.5s
   respawn at full HP. Players are excluded from each other's raycast while dead.
 
-Next: **M3 — AI bots + wave spawner (first playable Horde)** (see roadmap).
+### M3 — AI bots + waves (Horde) ✅
+- **Co-op Horde**: humans vs waves of bots (team-filtered combat — humans hurt
+  bots, bots hurt humans). Wave clears → next wave (more bots).
+- **A\* nav-grid pathfinding** built from arena geometry, with **jump-links**
+  validated by simulating the real jump (so bots reproduce them deterministically).
+- **GOAP** per bot: plans MoveToTarget → Shoot, or Retreat when low — navigation
+  (HOW) handled by the nav-grid, decisions (WHAT) by GOAP.
+- Room option `{ noBots: true }` creates a bot-free room (used by movement tests).
+
+Next: **M4 — classes + loadout selection** (see roadmap).

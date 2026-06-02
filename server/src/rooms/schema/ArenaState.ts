@@ -23,9 +23,14 @@ export class Player extends Schema {
   @type("boolean") alive: boolean = true;
   @type("uint16") kills: number = 0;
   @type("uint16") deaths: number = 0;
+  @type("boolean") isBot: boolean = false;
 }
 
 /** Root synchronized room state. */
 export class ArenaState extends Schema {
   @type({ map: Player }) players = new MapSchema<Player>();
+
+  // Horde mode (M3)
+  @type("uint16") wave: number = 0;
+  @type("uint16") botsAlive: number = 0;
 }

@@ -146,7 +146,8 @@ export class ArenaScene extends Phaser.Scene {
   private spawnRemote(player: any, sessionId: string) {
     const $ = getStateCallbacks(this.room!);
     const view = this.makeView(player, false);
-    view.label.setText(sessionId.slice(0, 4));
+    view.label.setText(player.isBot ? "BOT" : sessionId.slice(0, 4));
+    if (player.isBot) view.label.setColor("#ff9b9b");
     this.remotes.set(sessionId, view);
     $(player).onChange(() => {
       view.targetX = player.x;
@@ -242,7 +243,12 @@ export class ArenaScene extends Phaser.Scene {
       }
 
       const s = this.local.state;
-      this.hud.setText(`HP ${s.hp}/${s.maxHp}   K ${s.kills}  D ${s.deaths}   ·   room ${this.room?.roomId ?? "?"}`);
+      const st = this.room?.state as any;
+      const wave = st?.wave ?? 0;
+      const botsAlive = st?.botsAlive ?? 0;
+      this.hud.setText(
+        `HP ${s.hp}/${s.maxHp}   K ${s.kills}  D ${s.deaths}   ·   WAVE ${wave}  bots ${botsAlive}`,
+      );
       this.centerMsg.setText(alive ? "" : "ELIMINATED\nrespawning…");
     }
 

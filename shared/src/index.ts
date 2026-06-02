@@ -58,7 +58,7 @@ export const PHYS = {
   fixedDtMs: 1000 / 60,
   gravityScale: 0.0019,
   moveSpeed: 4.6, // horizontal px/step  (~276 px/s)
-  jumpVelocity: 11.5, // upward px/step at lift-off
+  jumpVelocity: 13.8, // upward px/step at lift-off (clears the ~140px platform gaps)
 } as const;
 
 /**
@@ -252,3 +252,7 @@ export function raycast(
 
   return { x: ox + dx * best, y: oy + dy * best, dist: best, id: bestId };
 }
+
+// Navigation (A* nav-grid + jump-links) and GOAP planning.
+export * from "./navgrid";
+export * from "./goap";

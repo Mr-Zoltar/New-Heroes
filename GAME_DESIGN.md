@@ -63,13 +63,40 @@ Później: **Engineer** (turrety — świetny do Hordy), **Ninja** (szybki, assa
 | M0 ✅ | Szkielet | Phaser+TS ↔ Colyseus+TS, 2 prostokąty synchronizowane (zrobione 2026-06-02) |
 | M1 ✅ | Ruch + arena | Matter.js platformer (grawitacja/skok), arena z kolizjami, server-authority + client-side prediction z rekonsiliacją (zrobione 2026-06-02) |
 | M2 ✅ | Walka | Hitscan (raycast na serwerze), celowanie myszką, HP, obrażenia, śmierć + respawn, kills/deaths, tracery (zrobione 2026-06-02) |
-| M3 | Boty + fale | AI + spawner → pierwsza grywalna Horda |
+| M3 ✅ | Boty + fale | **GOAP** + **A\* pathfinding** (nav-grid z jump-linkami) + spawner fal, co-op ludzie vs boty → grywalna Horda (zrobione 2026-06-02) |
 | M4 | Klasy | 3 klasy + wybór loadoutu |
 | M5 | Killstreaki | Ładowanie + aktywacja |
 | M6 | Bronie + warsztat | XP/kasa/blueprinty, ulepszanie broni |
 | M7 | Juice | Ragdolle, gibsy, screen shake, dźwięki, UI |
 | M8 | PvP | TDM + FFA |
 | M9 | 1v1 + duety | 1v1 online + tryby z botami |
+
+## 10a. Plan M3 — boty (GOAP + pathfinding)
+
+Wszystko **server-authoritative**, deterministyczne (stały tick). Bot = ciało Matter
+jak gracz; wpis w `players` z flagą `isBot` → reużywa fizyki, walki i renderu.
+
+1. **Nav-grid** (budowany raz przy starcie pokoju z geometrii areny):
+   - węzły = pozycje „stania" (komórki tuż nad platformą/podłogą),
+   - krawędzie: chód (sąsiednie po powierzchni), zejście (drop na niższą platformę),
+     **jump-linki** (skok między platformami — walidowany symulacją łuku skoku z
+     `shared`: jumpVelocity + grawitacja + moveSpeed).
+2. **A\* pathfinding** po nav-grid → lista waypointów (chód / skok / drop). Bot tłumaczy
+   waypoint na input (left/right, jump na starcie jump-linku). Re-path gdy cel zmieni komórkę.
+3. **GOAP** (per bot): świat (hasLOS, inRange, hpLow, targetAlive…), cele (KillTarget,
+   Survive), akcje z pre/efektami/kosztem (MoveToTarget→pathfinder, GetLOS/Flank, Shoot→
+   istniejący hitscan, Retreat/TakeCover). Planner = A* po akcjach → plan; re-plan gdy świat
+   się zmieni. F.E.A.R.-style: GOAP wybiera CO, pathfinder robi JAK.
+4. **Celowanie**: kąt do celu (leading wg prędkości celu — pod przyszłe pociski; hitscan na razie wprost).
+5. **Spawner fal**: fala N → liczba botów = f(N), spawn w czasie; po wyczyszczeniu fali → następna.
+   Stan w schemie: `wave`, `botsAlive`. Co-op: ludzie vs boty.
+
+**Zakres M3 (grywalne):** nav-grid + A* + jump-linki · GOAP ~4 akcje / 2 cele · boty w
+`players` (isBot) · spawner z rosnącą liczbą · HUD fali. Skalowanie trudności = liczba (reszta M4+).
+
+**Weryfikacja (headless):** nav-grid buduje się (węzły + jump-linki istnieją) · A* znajduje
+ścieżkę przez jump-link · GOAP zwraca sensowny plan (brak LOS → MoveTo→Shoot; hpLow → Retreat)
+· integracja: bot dochodzi do stojącego gracza i zadaje dmg; ubicie botów → kolejna fala.
 
 ## 11. Źródła / inspiracja
 - Strike Force Heroes 3 Wiki (klasy): https://strike-force-heroes-3.fandom.com/wiki/Classes

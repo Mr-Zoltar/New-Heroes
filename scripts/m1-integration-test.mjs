@@ -22,8 +22,10 @@ async function hold(room, getInput, durationMs) {
   }
 }
 
+// noBots: isolate movement/sync from the Horde AI.
 const a = new Client(`http://localhost:${PORT}`);
-const ra = await a.joinOrCreate(ROOM);
+const ra = await a.joinOrCreate(ROOM, { noBots: true });
+ra.onMessage("shot", () => {});
 const me = () => ra.state.players.get(ra.sessionId);
 console.log("joined A:", ra.sessionId);
 
@@ -43,7 +45,13 @@ const x1 = me().x;
 console.log(`move right: ${x0.toFixed(1)} -> ${x1.toFixed(1)} (Δ=${(x1 - x0).toFixed(1)})`);
 if (x1 - x0 < 40) fail(`did not move right (Δ=${(x1 - x0).toFixed(1)})`);
 
-// 3) Jump — pulse jump, sample minimum y (highest point).
+// 3) Jump — first settle on the ground (movement may have left us mid-air), then pulse jump.
+for (let i = 0; i < 90; i++) {
+  seq++;
+  ra.send("input", { seq, left: false, right: false, jump: false });
+  await sleep(16);
+  if (me().grounded) break;
+}
 const yBefore = me().y;
 let minY = yBefore;
 const jStart = Date.now();
@@ -60,9 +68,17 @@ if (apex < 25) fail(`jump too small (apex=${apex.toFixed(1)})`);
 
 // 4) Cross-client consistency — second client sees A; positions match.
 const b = new Client(`http://localhost:${PORT}`);
-const rb = await b.joinOrCreate(ROOM);
+const rb = await b.joinOrCreate(ROOM, { noBots: true });
+rb.onMessage("shot", () => {});
 await sleep(500);
-if (rb.state.players.size !== 2) fail(`client B sees ${rb.state.players.size} players, expected 2`);
+const humans = () => {
+  let n = 0;
+  rb.state.players.forEach((p) => {
+    if (!p.isBot) n++;
+  });
+  return n;
+};
+if (humans() !== 2) fail(`client B sees ${humans()} humans, expected 2`);
 await hold(ra, () => ({ right: true }), 500);
 await sleep(300);
 const aSelf = ra.state.players.get(ra.sessionId).x;
