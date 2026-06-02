@@ -1,0 +1,20 @@
+{
+  "name": "new-heroes",
+  "private": true,
+  "version": "0.0.0",
+  "description": "New Heroes — multiplayer 2D arena shooter (Phaser 3 + Matter.js + Colyseus). Strike Force Heroes 3 inspired.",
+  "workspaces": [
+    "shared",
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c green,cyan \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "npm --workspace server run dev",
+    "dev:client": "npm --workspace client run dev",
+    "build": "npm --workspace client run build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
