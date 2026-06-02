@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { ClassSelectScene } from "./scenes/ClassSelectScene";
 import { ArenaScene } from "./scenes/ArenaScene";
 import { ARENA_WIDTH, ARENA_HEIGHT } from "@new-heroes/shared";
 
@@ -9,5 +10,5 @@ new Phaser.Game({
   height: ARENA_HEIGHT,
   backgroundColor: "#222034",
   pixelArt: false,
-  scene: [ArenaScene],
+  scene: [ClassSelectScene, ArenaScene],
 });

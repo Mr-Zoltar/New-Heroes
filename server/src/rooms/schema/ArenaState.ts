@@ -24,6 +24,7 @@ export class Player extends Schema {
   @type("uint16") kills: number = 0;
   @type("uint16") deaths: number = 0;
   @type("boolean") isBot: boolean = false;
+  @type("string") classId: string = "mercenary";
 }
 
 /** Root synchronized room state. */

@@ -38,18 +38,25 @@ export class PredictedPlayer {
   readonly body: Matter.Body;
   private pending: InputCommand[] = [];
   private seq = 0;
+  private moveSpeed: number;
 
-  constructor(spawnX: number, spawnY: number) {
+  constructor(spawnX: number, spawnY: number, moveSpeed: number) {
     this.engine = createEngine();
     this.statics = addArena(this.engine.world);
     this.body = createPlayerBody(spawnX, spawnY);
     Matter.World.add(this.engine.world, this.body);
+    this.moveSpeed = moveSpeed;
+  }
+
+  /** Update the per-class movement speed (e.g. after switching loadout). */
+  setMoveSpeed(moveSpeed: number): void {
+    this.moveSpeed = moveSpeed;
   }
 
   /** Advance prediction by one fixed step. Returns the seq-stamped command to send. */
   step(raw: RawInput): InputCommand {
     const input: InputCommand = { seq: ++this.seq, left: raw.left, right: raw.right, jump: raw.jump };
-    simulateStep(this.engine, this.body, this.statics, input);
+    simulateStep(this.engine, this.body, this.statics, input, this.moveSpeed);
     this.pending.push(input);
     return input;
   }
@@ -62,7 +69,7 @@ export class PredictedPlayer {
     // Drop inputs the server has already processed, replay the rest.
     this.pending = this.pending.filter((i) => i.seq > server.lastSeq);
     for (const input of this.pending) {
-      simulateStep(this.engine, this.body, this.statics, input);
+      simulateStep(this.engine, this.body, this.statics, input, this.moveSpeed);
     }
   }
 

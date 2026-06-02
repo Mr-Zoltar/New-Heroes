@@ -7,7 +7,8 @@ import {
   PLAYER_WIDTH,
   PLAYER_HEIGHT,
   PHYS,
-  WEAPON,
+  CLASSES,
+  resolveClass,
   RESPAWN_DELAY_MS,
   Messages,
   createEngine,
@@ -20,18 +21,15 @@ import {
   raycast,
   buildNavGrid,
   type NavGrid,
+  type ClassId,
   type InputCommand,
   type ShootCommand,
+  type SetClassCommand,
 } from "@new-heroes/shared";
 
-const PLAYER_COLORS = [
-  "#ff5555", "#55dd55", "#5599ff", "#ffcc33",
-  "#ff66cc", "#33e0d0", "#ff9933", "#cc88ff",
-];
 const BOT_COLOR = "#d23b3b";
 
 const MAX_QUEUE = 8;
-const COOLDOWN_TICKS = Math.max(1, Math.round(WEAPON.fireCooldownMs / PHYS.fixedDtMs));
 const RESPAWN_TICKS = Math.round(RESPAWN_DELAY_MS / PHYS.fixedDtMs);
 const BOT_REMOVE_TICKS = 30; // corpse lingers ~0.5s before removal
 const INTERMISSION_TICKS = 120; // ~2s between waves
@@ -59,7 +57,6 @@ export class ArenaRoom extends Room<ArenaState> {
   private removeAt = new Map<string, number>();
 
   private tickCount = 0;
-  private colorIndex = 0;
   private botCounter = 0;
   private botsRemaining = 0;
   private waveActive = false;
@@ -89,6 +86,14 @@ export class ArenaRoom extends Room<ArenaState> {
 
     this.onMessage<ShootCommand>(Messages.Shoot, (client, data) => this.handleShoot(client.sessionId, data));
 
+    this.onMessage<SetClassCommand>(Messages.SetClass, (client, data) => {
+      const player = this.state.players.get(client.sessionId);
+      const body = this.bodies.get(client.sessionId);
+      if (!player || player.isBot || !body || !data) return;
+      this.applyClass(player, resolveClass(data.className).id);
+      this.respawn(client.sessionId, player, body); // re-deploy with the new loadout
+    });
+
     this.setSimulationInterval(() => this.tick(), PHYS.fixedDtMs);
     console.log(`[room] ArenaRoom created (${this.roomId}) — nav nodes: ${this.nav.nodes.length}`);
   }
@@ -116,7 +121,7 @@ export class ArenaRoom extends Room<ArenaState> {
         });
         player.aim = decision.aim;
         const input: InputCommand = { seq: 0, left: decision.dir < 0, right: decision.dir > 0, jump: decision.jump };
-        applyInput(body, input, grounded);
+        applyInput(body, input, grounded, CLASSES[player.classId as ClassId]?.moveSpeed);
         processed.set(id, input);
         if (decision.shoot) this.handleShoot(id, { angle: decision.aim });
         return;
@@ -133,7 +138,7 @@ export class ArenaRoom extends Room<ArenaState> {
       const queue = this.queues.get(id)!;
       const input = queue.length > 0 ? queue.shift()! : idleInput(player.lastSeq);
       const grounded = isGrounded(body, this.statics);
-      applyInput(body, input, grounded);
+      applyInput(body, input, grounded, resolveClass(player.classId).moveSpeed);
       processed.set(id, input);
     });
 
@@ -204,9 +209,9 @@ export class ArenaRoom extends Room<ArenaState> {
 
     const player = new Player();
     player.isBot = true;
-    player.color = BOT_COLOR;
     player.x = pos.x;
     player.y = pos.y;
+    this.applyClass(player, "mercenary"); // bots use baseline movement (nav-grid is built for it)
     this.state.players.set(id, player);
     this.botsRemaining++;
   }
@@ -261,11 +266,13 @@ export class ArenaRoom extends Room<ArenaState> {
     const shooter = this.state.players.get(shooterId);
     if (!shooter || !shooter.alive || !data) return;
 
-    const last = this.lastShotTick.get(shooterId) ?? -COOLDOWN_TICKS;
-    if (this.tickCount - last < COOLDOWN_TICKS) return;
+    const weapon = resolveClass(shooter.classId).weapon;
+    const cooldownTicks = Math.max(1, Math.round(weapon.fireCooldownMs / PHYS.fixedDtMs));
+    const last = this.lastShotTick.get(shooterId) ?? -cooldownTicks;
+    if (this.tickCount - last < cooldownTicks) return;
     this.lastShotTick.set(shooterId, this.tickCount);
 
-    const angle = Number(data.angle) || 0;
+    const baseAngle = Number(data.angle) || 0;
     const ox = shooter.x;
     const oy = shooter.y;
 
@@ -277,16 +284,19 @@ export class ArenaRoom extends Room<ArenaState> {
       if (isEnemy) targets.push({ id: pid, cx: p.x, cy: p.y, halfW: PLAYER_WIDTH / 2, halfH: PLAYER_HEIGHT / 2 });
     });
 
-    const hit = raycast(ox, oy, angle, WEAPON.range, targets);
-    if (hit.id) {
-      const victim = this.state.players.get(hit.id);
-      if (victim && victim.alive) {
-        victim.hp = Math.max(0, victim.hp - WEAPON.damage);
-        if (victim.hp <= 0) this.killPlayer(hit.id, shooterId);
+    // Fire one ray per pellet (shotgun = several with spread).
+    for (let i = 0; i < weapon.pellets; i++) {
+      const offset = weapon.pellets > 1 ? (Math.random() - 0.5) * weapon.spread : 0;
+      const hit = raycast(ox, oy, baseAngle + offset, weapon.range, targets);
+      if (hit.id) {
+        const victim = this.state.players.get(hit.id);
+        if (victim && victim.alive) {
+          victim.hp = Math.max(0, victim.hp - weapon.damage);
+          if (victim.hp <= 0) this.killPlayer(hit.id, shooterId);
+        }
       }
+      this.broadcast(Messages.Shot, { shooterId, sx: ox, sy: oy, hx: hit.x, hy: hit.y, hitId: hit.id });
     }
-
-    this.broadcast(Messages.Shot, { shooterId, sx: ox, sy: oy, hx: hit.x, hy: hit.y, hitId: hit.id });
   }
 
   private killPlayer(victimId: string, shooterId: string) {
@@ -327,7 +337,7 @@ export class ArenaRoom extends Room<ArenaState> {
 
   // ---- Lifecycle ----------------------------------------------------------
 
-  onJoin(client: Client) {
+  onJoin(client: Client, options?: { className?: ClassId }) {
     const pos = this.spawnPosition();
     const body = createPlayerBody(pos.x, pos.y);
     Matter.World.add(this.engine.world, body);
@@ -338,13 +348,21 @@ export class ArenaRoom extends Room<ArenaState> {
     const player = new Player();
     player.x = pos.x;
     player.y = pos.y;
-    player.color = PLAYER_COLORS[this.colorIndex % PLAYER_COLORS.length];
-    this.colorIndex++;
+    this.applyClass(player, resolveClass(options?.className).id);
     this.state.players.set(client.sessionId, player);
 
     if (this.botsEnabled && !this.waveActive && this.state.wave === 0) this.startWave(1);
 
-    console.log(`[room] ${client.sessionId} joined — ${this.state.players.size} entit(ies)`);
+    console.log(`[room] ${client.sessionId} joined as ${player.classId} — ${this.state.players.size} entit(ies)`);
+  }
+
+  /** Apply a class's stats to a player (used on join, class switch, and keeps on respawn). */
+  private applyClass(player: Player, classId: ClassId) {
+    const def = CLASSES[classId] ?? CLASSES.mercenary;
+    player.classId = def.id;
+    player.maxHp = def.maxHp;
+    player.hp = def.maxHp;
+    player.color = player.isBot ? BOT_COLOR : def.color;
   }
 
   onLeave(client: Client) {

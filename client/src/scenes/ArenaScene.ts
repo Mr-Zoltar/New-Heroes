@@ -9,8 +9,9 @@ import {
   PLAYER_HEIGHT,
   ARENA_PLATFORMS,
   PHYS,
-  WEAPON,
+  CLASSES,
   Messages,
+  type ClassId,
   type ShotEvent,
 } from "@new-heroes/shared";
 
@@ -38,6 +39,8 @@ export class ArenaScene extends Phaser.Scene {
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private keys!: Record<"W" | "A" | "S" | "D" | "SPACE", Phaser.Input.Keyboard.Key>;
+  private classKeys!: Record<"ONE" | "TWO" | "THREE", Phaser.Input.Keyboard.Key>;
+  private className: ClassId = "mercenary";
 
   private aimGfx!: Phaser.GameObjects.Graphics;
   private tracers: { gfx: Phaser.GameObjects.Graphics; born: number }[] = [];
@@ -52,7 +55,8 @@ export class ArenaScene extends Phaser.Scene {
     super("arena");
   }
 
-  create() {
+  create(data?: { className?: ClassId }) {
+    this.className = data?.className ?? "mercenary";
     this.cameras.main.setBackgroundColor("#222034");
     this.input.setDefaultCursor("crosshair");
 
@@ -84,13 +88,14 @@ export class ArenaScene extends Phaser.Scene {
     const kb = this.input.keyboard!;
     this.cursors = kb.createCursorKeys();
     this.keys = kb.addKeys("W,A,S,D,SPACE") as typeof this.keys;
+    this.classKeys = kb.addKeys("ONE,TWO,THREE") as typeof this.classKeys;
 
     void this.connect();
   }
 
   private async connect() {
     try {
-      const room = await connectToArena();
+      const room = await connectToArena(this.className);
       this.room = room;
       const $ = getStateCallbacks(room);
       const state = room.state as any;
@@ -133,7 +138,7 @@ export class ArenaScene extends Phaser.Scene {
 
   private spawnLocal(player: any) {
     const $ = getStateCallbacks(this.room!);
-    this.predicted = new PredictedPlayer(player.x, player.y);
+    this.predicted = new PredictedPlayer(player.x, player.y, CLASSES[this.className].moveSpeed);
     this.local = this.makeView(player, true);
 
     $(player).onChange(() => {
@@ -222,10 +227,16 @@ export class ArenaScene extends Phaser.Scene {
 
       // Auto-fire while LMB held (client cooldown for feel; server is authoritative).
       const alive = this.local?.state.alive ?? false;
-      if (alive && this.input.activePointer.isDown && now - this.lastShotAt >= WEAPON.fireCooldownMs) {
+      const cooldown = CLASSES[this.className].weapon.fireCooldownMs;
+      if (alive && this.input.activePointer.isDown && now - this.lastShotAt >= cooldown) {
         this.room.send(Messages.Shoot, { angle: this.aim });
         this.lastShotAt = now;
       }
+
+      // Switch class / loadout (re-deploys on the server).
+      if (Phaser.Input.Keyboard.JustDown(this.classKeys.ONE)) this.switchClass("mercenary");
+      else if (Phaser.Input.Keyboard.JustDown(this.classKeys.TWO)) this.switchClass("juggernaut");
+      else if (Phaser.Input.Keyboard.JustDown(this.classKeys.THREE)) this.switchClass("sniper");
     }
 
     // Render local player from predicted body; snap to server while dead (no prediction).
@@ -246,8 +257,10 @@ export class ArenaScene extends Phaser.Scene {
       const st = this.room?.state as any;
       const wave = st?.wave ?? 0;
       const botsAlive = st?.botsAlive ?? 0;
+      const cls = CLASSES[this.className];
       this.hud.setText(
-        `HP ${s.hp}/${s.maxHp}   K ${s.kills}  D ${s.deaths}   ·   WAVE ${wave}  bots ${botsAlive}`,
+        `${cls.name} [${cls.weapon.name}]   HP ${s.hp}/${s.maxHp}   K ${s.kills} D ${s.deaths}` +
+          `   ·   WAVE ${wave} bots ${botsAlive}   ·   [1/2/3] switch class`,
       );
       this.centerMsg.setText(alive ? "" : "ELIMINATED\nrespawning…");
     }
@@ -271,6 +284,14 @@ export class ArenaScene extends Phaser.Scene {
     });
 
     this.exposeDebugState();
+  }
+
+  private switchClass(c: ClassId) {
+    if (c === this.className || !this.room) return;
+    this.className = c;
+    this.room.send(Messages.SetClass, { className: c });
+    this.predicted?.setMoveSpeed(CLASSES[c].moveSpeed);
+    this.local?.rect.setFillStyle(Phaser.Display.Color.HexStringToColor(CLASSES[c].color).color);
   }
 
   private exposeDebugState() {

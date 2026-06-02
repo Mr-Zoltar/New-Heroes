@@ -23,6 +23,7 @@ export const Messages = {
   Input: "input",
   Shoot: "shoot",
   Shot: "shot",
+  SetClass: "setClass",
 } as const;
 
 /** Player health. */
@@ -51,6 +52,69 @@ export interface ShotEvent {
   hx: number;
   hy: number;
   hitId: string | null; // sessionId of the player hit, or null (wall / nothing)
+}
+
+// ---------------------------------------------------------------------------
+// Classes + loadout (M4). Movement speed varies per class; jump strength is
+// constant across classes so the bot nav-grid (built once) stays valid.
+// ---------------------------------------------------------------------------
+
+export type ClassId = "mercenary" | "juggernaut" | "sniper";
+export const CLASS_IDS: ClassId[] = ["mercenary", "juggernaut", "sniper"];
+
+export interface WeaponDef {
+  name: string;
+  damage: number; // per pellet
+  fireCooldownMs: number;
+  range: number;
+  pellets: number; // rays per shot (shotgun > 1)
+  spread: number; // total angular spread in radians (for multi-pellet)
+}
+
+export interface ClassDef {
+  id: ClassId;
+  name: string;
+  color: string;
+  maxHp: number;
+  moveSpeed: number;
+  weapon: WeaponDef;
+}
+
+export const CLASSES: Record<ClassId, ClassDef> = {
+  mercenary: {
+    id: "mercenary",
+    name: "Mercenary",
+    color: "#5599ff",
+    maxHp: 100,
+    moveSpeed: 4.6,
+    weapon: { name: "Rifle", damage: 16, fireCooldownMs: 110, range: 1000, pellets: 1, spread: 0 },
+  },
+  juggernaut: {
+    id: "juggernaut",
+    name: "Juggernaut",
+    color: "#ffcc33",
+    maxHp: 180,
+    moveSpeed: 3.4,
+    weapon: { name: "Shotgun", damage: 9, fireCooldownMs: 620, range: 340, pellets: 6, spread: 0.42 },
+  },
+  sniper: {
+    id: "sniper",
+    name: "Sniper",
+    color: "#55dd55",
+    maxHp: 75,
+    moveSpeed: 4.2,
+    weapon: { name: "Sniper", damage: 60, fireCooldownMs: 950, range: 1200, pellets: 1, spread: 0 },
+  },
+};
+
+/** Resolve a (possibly untrusted) class id, defaulting to Mercenary. */
+export function resolveClass(id: unknown): ClassDef {
+  return CLASSES[(id as ClassId)] ?? CLASSES.mercenary;
+}
+
+/** Message: pick/change class (applies on (re)spawn). */
+export interface SetClassCommand {
+  className: ClassId;
 }
 
 /** Tunable platformer physics (in matter-js units: velocity is px per fixed step). */
@@ -137,11 +201,19 @@ export function isGrounded(body: Matter.Body, statics: Matter.Body[]): boolean {
   return Matter.Query.region(statics, region as Matter.Bounds).length > 0;
 }
 
-/** Apply an input frame to a player body: kinematic horizontal + jump impulse when grounded. */
-export function applyInput(body: Matter.Body, input: InputCommand, grounded: boolean): void {
+/**
+ * Apply an input frame to a player body: kinematic horizontal + jump impulse when grounded.
+ * `moveSpeed` is per-class (jump strength stays constant so the bot nav-grid stays valid).
+ */
+export function applyInput(
+  body: Matter.Body,
+  input: InputCommand,
+  grounded: boolean,
+  moveSpeed: number = PHYS.moveSpeed,
+): void {
   let vx = 0;
-  if (input.left) vx -= PHYS.moveSpeed;
-  if (input.right) vx += PHYS.moveSpeed;
+  if (input.left) vx -= moveSpeed;
+  if (input.right) vx += moveSpeed;
   const vy = input.jump && grounded ? -PHYS.jumpVelocity : body.velocity.y;
   Matter.Body.setVelocity(body, { x: vx, y: vy });
 }
@@ -155,9 +227,10 @@ export function simulateStep(
   body: Matter.Body,
   statics: Matter.Body[],
   input: InputCommand,
+  moveSpeed: number = PHYS.moveSpeed,
 ): boolean {
   const grounded = isGrounded(body, statics);
-  applyInput(body, input, grounded);
+  applyInput(body, input, grounded, moveSpeed);
   Matter.Engine.update(engine, PHYS.fixedDtMs);
   return grounded;
 }

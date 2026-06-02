@@ -64,7 +64,7 @@ Później: **Engineer** (turrety — świetny do Hordy), **Ninja** (szybki, assa
 | M1 ✅ | Ruch + arena | Matter.js platformer (grawitacja/skok), arena z kolizjami, server-authority + client-side prediction z rekonsiliacją (zrobione 2026-06-02) |
 | M2 ✅ | Walka | Hitscan (raycast na serwerze), celowanie myszką, HP, obrażenia, śmierć + respawn, kills/deaths, tracery (zrobione 2026-06-02) |
 | M3 ✅ | Boty + fale | **GOAP** + **A\* pathfinding** (nav-grid z jump-linkami) + spawner fal, co-op ludzie vs boty → grywalna Horda (zrobione 2026-06-02) |
-| M4 | Klasy | 3 klasy + wybór loadoutu |
+| M4 ✅ | Klasy | 3 klasy (Mercenary/Juggernaut/Sniper) — różne HP/speed/broń (shotgun=pellety), ekran wyboru + zmiana 1/2/3 (zrobione 2026-06-02) |
 | M5 | Killstreaki | Ładowanie + aktywacja |
 | M6 | Bronie + warsztat | XP/kasa/blueprinty, ulepszanie broni |
 | M7 | Juice | Ragdolle, gibsy, screen shake, dźwięki, UI |

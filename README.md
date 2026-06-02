@@ -41,9 +41,10 @@ npm run dev:server   # Colyseus on :2567
 npm run dev:client   # Vite on :5173
 ```
 
-Open `http://localhost:5173` in **two** browser windows — each spawns a player.
+Open `http://localhost:5173` — pick a class, then you spawn into the arena.
 Move with **A/D or ←/→**, jump with **W / ↑ / Space**, aim with the **mouse**,
-shoot by **holding LMB**. Both windows stay in sync.
+shoot by **holding LMB**, switch class with **1 / 2 / 3**. Open a second window
+to play together (co-op vs the bot Horde).
 
 ## Tests
 
@@ -51,8 +52,10 @@ shoot by **holding LMB**. Both windows stay in sync.
 npx tsx scripts/m1-physics-test.ts     # physics + reconciliation unit test
 npx tsx scripts/m2-combat-test.ts      # hitscan raycast unit test
 npx tsx scripts/m3-ai-test.ts          # nav-grid + jump-links + A* + GOAP unit test
+npx tsx scripts/m4-classes-test.ts     # class stats + per-class move speed unit test
 node scripts/m1-integration-test.mjs   # movement/sync end-to-end (joins with noBots)
 node scripts/m3-integration-test.mjs   # Horde end-to-end: bots, damage, kills, wave advance
+node scripts/m4-integration-test.mjs   # loadout selection + per-class weapons end-to-end
 ```
 
 ## Status
@@ -86,4 +89,13 @@ node scripts/m3-integration-test.mjs   # Horde end-to-end: bots, damage, kills, 
   (HOW) handled by the nav-grid, decisions (WHAT) by GOAP.
 - Room option `{ noBots: true }` creates a bot-free room (used by movement tests).
 
-Next: **M4 — classes + loadout selection** (see roadmap).
+### M4 — classes + loadout ✅
+- Three classes with distinct stats: **Mercenary** (rifle, balanced),
+  **Juggernaut** (shotgun + multi-pellet, tanky, slow), **Sniper** (high-damage,
+  squishy). Class sets HP, move speed, and weapon (damage / fire rate / range /
+  pellets / spread) — all server-authoritative.
+- **Class-select screen** on launch; switch in-game with **1 / 2 / 3** (re-deploys).
+- Movement speed is per-class but jump strength is constant (keeps the bot
+  nav-grid valid); bots use the baseline Mercenary movement.
+
+Next: **M5 — killstreaks** (see roadmap).
