@@ -42,13 +42,16 @@ npm run dev:client   # Vite on :5173
 ```
 
 Open `http://localhost:5173` in **two** browser windows — each spawns a player.
-Move with **A/D or ←/→**, jump with **W / ↑ / Space**. Both windows stay in sync.
+Move with **A/D or ←/→**, jump with **W / ↑ / Space**, aim with the **mouse**,
+shoot by **holding LMB**. Both windows stay in sync.
 
 ## Tests
 
 ```bash
-node scripts/m1-integration-test.mjs   # end-to-end vs the running server
-npx tsx scripts/m1-physics-test.ts     # pure physics + reconciliation unit test
+npx tsx scripts/m1-physics-test.ts     # physics + reconciliation unit test
+node scripts/m1-integration-test.mjs   # movement end-to-end vs running server
+npx tsx scripts/m2-combat-test.ts      # hitscan raycast unit test
+node scripts/m2-integration-test.mjs   # combat end-to-end vs running server
 ```
 
 ## Status
@@ -65,4 +68,12 @@ npx tsx scripts/m1-physics-test.ts     # pure physics + reconciliation unit test
   authoritative snapshot (verified 0px reconciliation drift). Remote players
   are interpolated.
 
-Next: **M2 — combat (hitscan, HP, death/respawn)** (see roadmap).
+### M2 — hitscan combat ✅
+- **Mouse aim**; hold **LMB** to fire (auto-fire, server-enforced fire rate).
+- **Server-authoritative hitscan**: the server raycasts (ray-vs-AABB against the
+  arena + alive players), applies damage, and broadcasts each shot for tracer +
+  hit-spark rendering.
+- **HP, death, respawn**: HP bars over every player, kill/death counters, a 2.5s
+  respawn at full HP. Players are excluded from each other's raycast while dead.
+
+Next: **M3 — AI bots + wave spawner (first playable Horde)** (see roadmap).

@@ -21,7 +21,37 @@ export const PLAYER_HEIGHT = 44;
 /** Message channel names exchanged over the Colyseus room. */
 export const Messages = {
   Input: "input",
+  Shoot: "shoot",
+  Shot: "shot",
 } as const;
+
+/** Player health. */
+export const PLAYER_MAX_HP = 100;
+
+/** Respawn delay after death (ms). */
+export const RESPAWN_DELAY_MS = 2500;
+
+/** M2 single weapon (hitscan rifle). Damage/cooldown/range tuned per weapon later (M6). */
+export const WEAPON = {
+  damage: 18,
+  fireCooldownMs: 120,
+  range: 1000,
+} as const;
+
+/** A "shoot" request from the client: just the aim angle (server uses authoritative origin). */
+export interface ShootCommand {
+  angle: number;
+}
+
+/** Broadcast describing a fired shot, for rendering tracers / hit sparks on every client. */
+export interface ShotEvent {
+  shooterId: string;
+  sx: number;
+  sy: number;
+  hx: number;
+  hy: number;
+  hitId: string | null; // sessionId of the player hit, or null (wall / nothing)
+}
 
 /** Tunable platformer physics (in matter-js units: velocity is px per fixed step). */
 export const PHYS = {
@@ -137,4 +167,88 @@ export function facingFromInput(input: InputCommand): number {
   if (input.left && !input.right) return -1;
   if (input.right && !input.left) return 1;
   return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Hitscan raycasting (axis-aligned boxes only — all bodies are AABBs here).
+// ---------------------------------------------------------------------------
+
+/** A box the ray can hit. id = player sessionId, or null for static geometry. */
+export interface RayTarget {
+  id: string | null;
+  cx: number;
+  cy: number;
+  halfW: number;
+  halfH: number;
+}
+
+/** Result of a raycast: the hit/endpoint, distance, and which target (if any) was hit. */
+export interface RayHit {
+  x: number;
+  y: number;
+  dist: number;
+  id: string | null;
+}
+
+/** Ray vs axis-aligned box (slab method). Returns entry distance t≥0, or null if no hit. */
+function rayAABB(
+  ox: number, oy: number, dx: number, dy: number,
+  minX: number, minY: number, maxX: number, maxY: number,
+): number | null {
+  let tmin = -Infinity;
+  let tmax = Infinity;
+
+  if (Math.abs(dx) < 1e-9) {
+    if (ox < minX || ox > maxX) return null;
+  } else {
+    let t1 = (minX - ox) / dx;
+    let t2 = (maxX - ox) / dx;
+    if (t1 > t2) [t1, t2] = [t2, t1];
+    tmin = Math.max(tmin, t1);
+    tmax = Math.min(tmax, t2);
+  }
+
+  if (Math.abs(dy) < 1e-9) {
+    if (oy < minY || oy > maxY) return null;
+  } else {
+    let t1 = (minY - oy) / dy;
+    let t2 = (maxY - oy) / dy;
+    if (t1 > t2) [t1, t2] = [t2, t1];
+    tmin = Math.max(tmin, t1);
+    tmax = Math.min(tmax, t2);
+  }
+
+  if (tmax < tmin || tmax < 0) return null;
+  return tmin >= 0 ? tmin : 0; // 0 => origin is inside the box
+}
+
+/** Returns AABB targets for the static arena geometry. */
+export function arenaRayTargets(): RayTarget[] {
+  return ARENA_PLATFORMS.map((p) => ({
+    id: null,
+    cx: p.x,
+    cy: p.y,
+    halfW: p.w / 2,
+    halfH: p.h / 2,
+  }));
+}
+
+/** Cast a ray from (ox,oy) at `angle` up to `range`, returning the nearest hit (or the endpoint). */
+export function raycast(
+  ox: number, oy: number, angle: number, range: number, targets: RayTarget[],
+): RayHit {
+  const dx = Math.cos(angle);
+  const dy = Math.sin(angle);
+  let best = range;
+  let bestId: string | null = null;
+
+  for (const t of targets) {
+    const hit = rayAABB(ox, oy, dx, dy, t.cx - t.halfW, t.cy - t.halfH, t.cx + t.halfW, t.cy + t.halfH);
+    if (hit !== null && hit < best) {
+      best = hit;
+      bestId = t.id;
+    }
+  }
+
+  return { x: ox + dx * best, y: oy + dy * best, dist: best, id: bestId };
 }
