@@ -61,7 +61,7 @@ Później: **Engineer** (turrety — świetny do Hordy), **Ninja** (szybki, assa
 | # | Kamień | Rezultat |
 |---|---|---|
 | M0 ✅ | Szkielet | Phaser+TS ↔ Colyseus+TS, 2 prostokąty synchronizowane (zrobione 2026-06-02) |
-| M1 | Ruch + arena | Matter.js platforming, 1 mapa, server-authority + prediction |
+| M1 ✅ | Ruch + arena | Matter.js platformer (grawitacja/skok), arena z kolizjami, server-authority + client-side prediction z rekonsiliacją (zrobione 2026-06-02) |
 | M2 | Walka | Hitscan, HP, śmierć/respawn |
 | M3 | Boty + fale | AI + spawner → pierwsza grywalna Horda |
 | M4 | Klasy | 3 klasy + wybór loadoutu |

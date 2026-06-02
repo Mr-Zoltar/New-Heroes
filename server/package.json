@@ -11,9 +11,11 @@
     "@colyseus/tools": "^0.16.0",
     "@colyseus/ws-transport": "^0.16.0",
     "@new-heroes/shared": "*",
-    "colyseus": "0.16.5"
+    "colyseus": "0.16.5",
+    "matter-js": "^0.20.0"
   },
   "devDependencies": {
+    "@types/matter-js": "^0.20.0",
     "@types/node": "^22.10.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0"

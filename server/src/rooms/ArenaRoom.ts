@@ -1,12 +1,17 @@
 import { Room, Client } from "colyseus";
+import Matter from "matter-js";
 import { ArenaState, Player } from "./schema/ArenaState";
 import {
   ARENA_WIDTH,
-  ARENA_HEIGHT,
-  PLAYER_SIZE,
-  PLAYER_SPEED,
+  PHYS,
   Messages,
-  type InputState,
+  createEngine,
+  addArena,
+  createPlayerBody,
+  isGrounded,
+  applyInput,
+  facingFromInput,
+  type InputCommand,
 } from "@new-heroes/shared";
 
 const PLAYER_COLORS = [
@@ -14,80 +19,104 @@ const PLAYER_COLORS = [
   "#ff66cc", "#33e0d0", "#ff9933", "#cc88ff",
 ];
 
-const HALF = PLAYER_SIZE / 2;
+/** Max inputs buffered per player before we drop the oldest (bounds latency after a stall). */
+const MAX_QUEUE = 8;
+
+const idleInput = (seq: number): InputCommand => ({ seq, left: false, right: false, jump: false });
 
 /**
- * M0 arena room — authoritative movement.
- * Clients send held-direction input; the server simulates at a fixed step and
- * synchronizes player positions to everyone. (Matter.js physics arrives in M1.)
+ * M1 arena room — authoritative side-view platformer on Matter.js.
+ * Clients send one InputCommand per fixed tick (with a seq). The server drains
+ * one input per player per tick, steps a single shared engine, and publishes
+ * position + velocity + lastSeq so clients can reconcile their predicted state.
  */
 export class ArenaRoom extends Room<ArenaState> {
   maxClients = 8;
 
-  /** Latest input per client (server-side only — not part of synced state). */
-  private inputs = new Map<string, InputState>();
+  private engine!: Matter.Engine;
+  private statics!: Matter.Body[];
+  private bodies = new Map<string, Matter.Body>();
+  private queues = new Map<string, InputCommand[]>();
   private colorIndex = 0;
 
   onCreate() {
     this.setState(new ArenaState());
 
-    this.onMessage<InputState>(Messages.Input, (client, data) => {
-      this.inputs.set(client.sessionId, {
-        up: !!data?.up,
-        down: !!data?.down,
-        left: !!data?.left,
-        right: !!data?.right,
+    this.engine = createEngine();
+    this.statics = addArena(this.engine.world);
+
+    this.onMessage<InputCommand>(Messages.Input, (client, data) => {
+      const queue = this.queues.get(client.sessionId);
+      if (!queue || !data) return;
+      queue.push({
+        seq: data.seq >>> 0,
+        left: !!data.left,
+        right: !!data.right,
+        jump: !!data.jump,
       });
+      if (queue.length > MAX_QUEUE) queue.splice(0, queue.length - MAX_QUEUE);
     });
 
-    // Fixed 60 Hz authoritative simulation. State patches are sent on the
-    // default patch rate (~20 Hz); clients interpolate between them.
-    this.setSimulationInterval((dt) => this.update(dt), 1000 / 60);
-
+    this.setSimulationInterval(() => this.tick(), PHYS.fixedDtMs);
     console.log(`[room] ArenaRoom created (${this.roomId})`);
   }
 
-  private update(dt: number) {
-    const seconds = dt / 1000;
+  private tick() {
+    // 1) Apply one input per player (grounded checked BEFORE the world step).
+    const processed = new Map<string, InputCommand>();
     this.state.players.forEach((player, sessionId) => {
-      const input = this.inputs.get(sessionId);
-      if (!input) return;
+      const body = this.bodies.get(sessionId);
+      if (!body) return;
+      const queue = this.queues.get(sessionId)!;
+      const input = queue.length > 0 ? queue.shift()! : idleInput(player.lastSeq);
+      const grounded = isGrounded(body, this.statics);
+      applyInput(body, input, grounded);
+      processed.set(sessionId, input);
+    });
 
-      let dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
-      let dy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
-      if (dx === 0 && dy === 0) return;
+    // 2) One deterministic world step for every body.
+    Matter.Engine.update(this.engine, PHYS.fixedDtMs);
 
-      // Normalize diagonal movement so it isn't faster.
-      if (dx !== 0 && dy !== 0) {
-        dx *= Math.SQRT1_2;
-        dy *= Math.SQRT1_2;
-      }
-
-      player.x = clamp(player.x + dx * PLAYER_SPEED * seconds, HALF, ARENA_WIDTH - HALF);
-      player.y = clamp(player.y + dy * PLAYER_SPEED * seconds, HALF, ARENA_HEIGHT - HALF);
+    // 3) Publish authoritative snapshot.
+    this.state.players.forEach((player, sessionId) => {
+      const body = this.bodies.get(sessionId);
+      if (!body) return;
+      const input = processed.get(sessionId)!;
+      player.x = body.position.x;
+      player.y = body.position.y;
+      player.vx = body.velocity.x;
+      player.vy = body.velocity.y;
+      player.grounded = isGrounded(body, this.statics);
+      const facing = facingFromInput(input);
+      if (facing !== 0) player.facing = facing;
+      player.lastSeq = input.seq;
     });
   }
 
   onJoin(client: Client) {
+    const spawnX = 80 + Math.random() * (ARENA_WIDTH - 160);
+    const spawnY = 120;
+    const body = createPlayerBody(spawnX, spawnY);
+    Matter.World.add(this.engine.world, body);
+    this.bodies.set(client.sessionId, body);
+    this.queues.set(client.sessionId, []);
+
     const player = new Player();
-    player.x = HALF + Math.random() * (ARENA_WIDTH - PLAYER_SIZE);
-    player.y = HALF + Math.random() * (ARENA_HEIGHT - PLAYER_SIZE);
+    player.x = spawnX;
+    player.y = spawnY;
     player.color = PLAYER_COLORS[this.colorIndex % PLAYER_COLORS.length];
     this.colorIndex++;
-
-    this.inputs.set(client.sessionId, { up: false, down: false, left: false, right: false });
     this.state.players.set(client.sessionId, player);
 
     console.log(`[room] ${client.sessionId} joined — ${this.state.players.size} player(s)`);
   }
 
   onLeave(client: Client) {
+    const body = this.bodies.get(client.sessionId);
+    if (body) Matter.World.remove(this.engine.world, body);
+    this.bodies.delete(client.sessionId);
+    this.queues.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
-    this.inputs.delete(client.sessionId);
     console.log(`[room] ${client.sessionId} left — ${this.state.players.size} player(s)`);
   }
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
 }
