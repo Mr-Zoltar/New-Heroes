@@ -9,6 +9,7 @@ import {
   PHYS,
   CLASSES,
   resolveClass,
+  BOT_AI,
   RESPAWN_DELAY_MS,
   Messages,
   createEngine,
@@ -284,14 +285,18 @@ export class ArenaRoom extends Room<ArenaState> {
       if (isEnemy) targets.push({ id: pid, cx: p.x, cy: p.y, halfW: PLAYER_WIDTH / 2, halfH: PLAYER_HEIGHT / 2 });
     });
 
+    // Bots are nerfed: random aim error + reduced damage so they're survivable.
+    const aimError = shooter.isBot ? (Math.random() - 0.5) * 2 * BOT_AI.aimErrorRad : 0;
+    const damage = shooter.isBot ? Math.max(1, Math.round(weapon.damage * BOT_AI.damageScale)) : weapon.damage;
+
     // Fire one ray per pellet (shotgun = several with spread).
     for (let i = 0; i < weapon.pellets; i++) {
       const offset = weapon.pellets > 1 ? (Math.random() - 0.5) * weapon.spread : 0;
-      const hit = raycast(ox, oy, baseAngle + offset, weapon.range, targets);
+      const hit = raycast(ox, oy, baseAngle + aimError + offset, weapon.range, targets);
       if (hit.id) {
         const victim = this.state.players.get(hit.id);
         if (victim && victim.alive) {
-          victim.hp = Math.max(0, victim.hp - weapon.damage);
+          victim.hp = Math.max(0, victim.hp - damage);
           if (victim.hp <= 0) this.killPlayer(hit.id, shooterId);
         }
       }

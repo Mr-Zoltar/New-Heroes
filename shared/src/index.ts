@@ -39,6 +39,16 @@ export const WEAPON = {
   range: 1000,
 } as const;
 
+/** Bot behaviour tuning — deliberately dumber & slower than players, so they're survivable. */
+export const BOT_AI = {
+  reactionMs: 360, // must hold line-of-sight this long before the first shot
+  fireIntervalMs: 700, // min time between bot shots
+  aimErrorRad: 0.12, // random aim jitter (±) so bots miss
+  damageScale: 0.55, // bots deal less damage than the same weapon in human hands
+  engageRange: 380, // bot stops chasing / starts shooting within this distance
+  descendDrop: 28, // if the target is this far below, the bot just walks off the ledge
+} as const;
+
 /** A "shoot" request from the client: just the aim angle (server uses authoritative origin). */
 export interface ShootCommand {
   angle: number;

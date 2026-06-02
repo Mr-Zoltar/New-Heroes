@@ -52,9 +52,11 @@ to play together (co-op vs the bot Horde).
 npx tsx scripts/m1-physics-test.ts     # physics + reconciliation unit test
 npx tsx scripts/m2-combat-test.ts      # hitscan raycast unit test
 npx tsx scripts/m3-ai-test.ts          # nav-grid + jump-links + A* + GOAP unit test
+npx tsx scripts/m3-botbrain-test.ts    # bot nav (no orbit) + combat nerf unit test
 npx tsx scripts/m4-classes-test.ts     # class stats + per-class move speed unit test
 node scripts/m1-integration-test.mjs   # movement/sync end-to-end (joins with noBots)
 node scripts/m3-integration-test.mjs   # Horde end-to-end: bots, damage, kills, wave advance
+node scripts/m3-reach-test.mjs         # bots reach & damage a passive player (orbit regression)
 node scripts/m4-integration-test.mjs   # loadout selection + per-class weapons end-to-end
 ```
 
