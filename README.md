@@ -54,6 +54,7 @@ npx tsx scripts/m2-combat-test.ts      # hitscan raycast unit test
 npx tsx scripts/m3-ai-test.ts          # nav-grid + jump-links + A* + GOAP unit test
 npx tsx scripts/m3-botbrain-test.ts    # bot nav (no orbit/stand-still) + combat nerf unit test
 npx tsx scripts/m3-descent-test.ts     # simulated bot descends a platform to reach a lower target
+npx tsx scripts/m3-climb-test.ts       # simulated bot climbs up to a target on a higher platform
 npx tsx scripts/m4-classes-test.ts     # class stats + per-class move speed unit test
 node scripts/m1-integration-test.mjs   # movement/sync end-to-end (joins with noBots)
 node scripts/m3-integration-test.mjs   # Horde end-to-end: bots, damage, kills, wave advance

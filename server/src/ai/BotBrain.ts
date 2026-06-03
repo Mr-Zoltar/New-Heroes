@@ -90,12 +90,14 @@ export class BotBrain {
       this.lastShoot = this.tick;
     }
 
-    // Movement.
+    // Movement. Stand-and-shoot / back-away only when GROUNDED — while airborne we
+    // must keep following the jump arc (navigate), or gaining LOS mid-jump would zero
+    // the horizontal velocity and drop the bot straight back down.
     let dir: -1 | 0 | 1 = 0;
     let jump = false;
-    if (action === "Shoot" && hasLOS && inRange) {
+    if (grounded && action === "Shoot" && hasLOS && inRange) {
       dir = 0; // hold and fire
-    } else if (action === "Retreat") {
+    } else if (grounded && action === "Retreat") {
       dir = self.x < target.x ? -1 : 1; // back away, never jump
     } else {
       ({ dir, jump } = this.navigate(self, target, nav, grounded));
@@ -139,27 +141,42 @@ export class BotBrain {
       return { dir: this.dirTo(self.x, target.x), jump: grounded && target.y < self.y - 40 };
     }
 
-    // Advance along the path.
-    let next = this.path[this.pathStep + 1];
-    while (next !== undefined) {
-      const node = nav.nodes[next];
-      if (Math.abs(self.x - node.x) < 18 && Math.abs(self.y - node.y) < 40) {
-        this.pathStep++;
-        next = this.path[this.pathStep + 1];
-      } else break;
+    // Advance along the path ONLY while grounded, so a mid-air jump arc never flips
+    // the current segment (which would corrupt the jump it is executing).
+    if (grounded) {
+      let n = this.path[this.pathStep + 1];
+      while (n !== undefined) {
+        const nd = nav.nodes[n];
+        if (Math.abs(self.x - nd.x) < 18 && Math.abs(self.y - nd.y) < 40) {
+          this.pathStep++;
+          n = this.path[this.pathStep + 1];
+        } else break;
+      }
     }
+
+    const next = this.path[this.pathStep + 1];
     if (next === undefined) {
       return { dir: this.dirTo(self.x, target.x), jump: grounded && target.y < self.y - 40 };
     }
 
     const node = nav.nodes[next];
     const edge = getEdge(nav, this.path[this.pathStep], next);
-    const dir = this.dirTo(self.x, node.x);
-    // Jump only to go UP (real jump-link or higher node), grounded, roughly aligned.
+
+    // JUMP edge: must lift off from the node the edge was physics-simulated FROM
+    // (tight alignment), then reproduce its exact input direction through the arc.
+    // Jumping near the DESTINATION instead lifts off under the platform overhang and
+    // head-butts the underside (the climb-loop bug).
+    if (edge?.jump) {
+      const takeoff = nav.nodes[this.path[this.pathStep]];
+      if (!grounded) return { dir: edge.dir, jump: false }; // hold the simulated input mid-arc
+      if (Math.abs(self.x - takeoff.x) < 14) return { dir: edge.dir, jump: true }; // lift off here
+      return { dir: this.dirTo(self.x, takeoff.x), jump: false }; // walk onto the takeoff node first
+    }
+
+    // Walk / drop edge (drops never jump — walk off the ledge). Plain climb fallback only.
     const goingUp = node.y < self.y - 20;
-    const aligned = Math.abs(self.x - node.x) < 70;
-    const jump = grounded && !!(edge?.jump || goingUp) && aligned;
-    return { dir, jump };
+    const aligned = Math.abs(self.x - node.x) < 24;
+    return { dir: this.dirTo(self.x, node.x), jump: grounded && goingUp && aligned };
   }
 
   private dirTo(fromX: number, toX: number): -1 | 0 | 1 {
