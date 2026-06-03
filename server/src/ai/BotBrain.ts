@@ -30,7 +30,6 @@ export interface BotDecision {
   shoot: boolean;
 }
 
-const REPATH_INTERVAL = 14; // ticks between path recomputes (only while grounded)
 const STUCK_TICKS = 40; // no horizontal progress => force a repath (never a blind jump)
 const JUMP_CD_TICKS = 16; // min ticks between jumps (kills the jump-spam loop)
 const REACTION_TICKS = Math.round(BOT_AI.reactionMs / PHYS.fixedDtMs);
@@ -44,7 +43,7 @@ const FIRE_TICKS = Math.round(BOT_AI.fireIntervalMs / PHYS.fixedDtMs);
 export class BotBrain {
   private path: number[] | null = null;
   private pathStep = 0;
-  private repathIn = 0;
+  private goalNode = -1;
   private lastX = 0;
   private stuck = 0;
   private jumpCd = 0;
@@ -116,26 +115,23 @@ export class BotBrain {
     nav: NavGrid,
     grounded: boolean,
   ): { dir: -1 | 0 | 1; jump: boolean } {
-    // Only repath while grounded — mid-air positions make nearestNode jump around
-    // and produce climb-back-up paths (the orbit bug).
+    // Only (re)path while grounded — mid-air positions make nearestNode jump around
+    // and produce climb-back-up paths (the orbit bug). Commit to a path until it's
+    // finished / the target moves to a new node / we're stuck, otherwise periodic
+    // repaths flip the chosen route (left vs right drop) and the bot oscillates.
     if (grounded) {
       if (Math.abs(self.x - this.lastX) < 0.5) this.stuck++;
       else this.stuck = 0;
       this.lastX = self.x;
 
-      this.repathIn--;
-      if (!this.path || this.repathIn <= 0 || this.stuck > STUCK_TICKS) {
-        this.path = astar(nav, nearestNode(nav, self.x, self.y), nearestNode(nav, target.x, target.y));
+      const goal = nearestNode(nav, target.x, target.y);
+      const finished = !this.path || this.pathStep >= this.path.length - 1;
+      if (!this.path || finished || goal !== this.goalNode || this.stuck > STUCK_TICKS) {
+        this.path = astar(nav, nearestNode(nav, self.x, self.y), goal);
         this.pathStep = 0;
-        this.repathIn = REPATH_INTERVAL;
+        this.goalNode = goal;
         this.stuck = 0;
       }
-    }
-
-    // Descend shortcut: target clearly below => just walk toward it and fall off
-    // ledges. Never jump (jumping up is what caused the loop).
-    if (target.y > self.y + BOT_AI.descendDrop) {
-      return { dir: this.dirTo(self.x, target.x), jump: false };
     }
 
     // No usable path: chase directly, jump only to climb when clearly above.

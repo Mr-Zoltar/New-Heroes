@@ -10,7 +10,7 @@ function fail(msg: string): never {
 
 const nav = buildNavGrid();
 
-// 1) Target clearly below + out of range => walk toward it, NEVER jump (was the loop).
+// 1) Target below + out of range => route down via nav, move (not stand), never jump up.
 {
   const bot = new BotBrain();
   const d = bot.think({
@@ -20,8 +20,22 @@ const nav = buildNavGrid();
     nav,
   });
   if (d.jump) fail("bot jumps while descending toward a target below (orbit bug)");
-  if (d.dir !== -1) fail(`expected dir -1 toward target, got ${d.dir}`);
-  console.log("✅ descends without jumping (no orbit)");
+  if (d.dir === 0) fail("bot stands still instead of routing down to the target");
+  console.log("✅ descends without jumping, moves toward a route down");
+}
+
+// 1b) Target DIRECTLY below (same x): must route to a ledge to drop, not stand & aim.
+{
+  const bot = new BotBrain();
+  const d = bot.think({
+    self: { x: 400, y: 266, hp: 100, maxHp: 100 },
+    grounded: true,
+    target: { id: "P", x: 400, y: 546 },
+    nav,
+  });
+  if (d.jump) fail("bot jumps while above the target");
+  if (d.dir === 0) fail("bot stands directly above target (the reported stand-still bug)");
+  console.log("✅ routes to a ledge when target is directly below (no stand-still)");
 }
 
 // 2) Flat-ground chase => move toward, no jump.
